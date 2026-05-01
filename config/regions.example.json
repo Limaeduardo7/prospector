@@ -1,0 +1,39 @@
+{
+  "enabled": true,
+  "cadenceHours": 168,
+  "messageTemplate": "Oi, {nome}! Tudo bem? 👊\n\nVi que vocês trabalham com assistência técnica e reparo de celulares em {cidade}.\n\nComo hoje é Dia do Trabalhador, estamos liberando uma condição especial para técnicos que querem subir de nível na bancada.\n\nO CPU PRO é um treinamento avançado para quem quer dominar diagnóstico e reparo de CPU, pegar serviços de maior valor e aumentar o ticket da assistência.\n\nQuer que eu te envie o link com as condições especiais de hoje?",
+  "regions": [
+    {
+      "city": "Caxias do Sul",
+      "region": "RS",
+      "query": "assistência técnica celular",
+      "limit": 30,
+      "enabled": true,
+      "allowedDdds": ["54"]
+    },
+    {
+      "city": "Porto Alegre",
+      "region": "RS",
+      "query": "assistência técnica celular",
+      "limit": 40,
+      "enabled": true,
+      "allowedDdds": ["51"]
+    },
+    {
+      "city": "Canoas",
+      "region": "RS",
+      "query": "assistência técnica celular",
+      "limit": 30,
+      "enabled": true,
+      "allowedDdds": ["51"]
+    },
+    {
+      "city": "Novo Hamburgo",
+      "region": "RS",
+      "query": "assistência técnica celular",
+      "limit": 30,
+      "enabled": true,
+      "allowedDdds": ["51"]
+    }
+  ]
+}

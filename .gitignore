@@ -1,0 +1,6 @@
+.env
+data/campaigns.json
+data/*.local.json
+logs/
+node_modules/
+*.log
