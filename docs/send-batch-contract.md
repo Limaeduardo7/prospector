@@ -1,46 +1,51 @@
-# Send batch contract
+# Send Batch Contract
 
-O envio real fica fora deste repositório e deve existir no backend operacional.
+Real message sending lives outside this repository in the operational backend.
 
-Endpoint usado em produção:
+## Endpoint pattern
 
 ```http
-POST /api/automation/whatsapp/fastfix-academy-prospecting/send-batch
+POST /api/automation/whatsapp/{client-slug}/send-batch
 Content-Type: application/json
 ```
 
-Payload:
+## Payload
 
 ```json
 {
-  "campaign_id": "uuid-ou-slug",
-  "city": "Porto Alegre",
-  "region": "RS",
+  "campaign_id": "uuid-or-slug",
+  "client": "my-client",
+  "city": "São Paulo",
+  "region": "SP",
   "message_template": "Oi, {nome}! ... {cidade} ...",
   "delay_ms": 2500,
   "validate_only": true,
-  "allowed_ddds": ["51"],
+  "allowed_ddds": ["11"],
   "prospects": [
     {
       "id": "uuid",
       "name": "pessoal",
-      "phone": "55DDNUMERO",
-      "sourceUrl": "https://exemplo.com",
-      "snippet": "trecho de auditoria"
+      "phone": "5511987654321",
+      "sourceUrl": "https://example.com",
+      "snippet": "audit excerpt around phone"
     }
   ]
 }
 ```
 
-Comportamento obrigatório do backend:
+## Required backend behavior
 
-- `validate_only=true`: validar DDD + WhatsApp e não enviar mensagem.
-- `validate_only=false`: validar novamente antes de cada envio.
-- Responder resumo com `summary.ok`, `summary.failed`, `summary.sendable`.
-- Logar `batch_started`, `sent`, `failed`, `batch_finished` com `campaign_id`.
+- `validate_only: true` — re-validate DDD + WhatsApp, do not send any messages.
+- `validate_only: false` — re-validate before each send, then send.
+- Respond with a summary containing `summary.ok`, `summary.failed`, `summary.sendable`.
+- Log `batch_started`, `sent`, `failed`, `batch_finished` with `campaign_id` and `client`.
 
-Variáveis do template:
+## Template variables
 
-- `{nome}` / `{name}`
-- `{cidade}` / `{city}`
-- `{regiao}` / `{region}`
+| Variable | Description |
+|----------|-------------|
+| `{nome}` / `{name}` | Prospect name (use `pessoal` as generic fallback) |
+| `{cidade}` / `{city}` | City name |
+| `{regiao}` / `{region}` | State/region code |
+| `{cliente}` / `{client}` | Client slug |
+| `{query}` | Search query used for this region |

@@ -4,19 +4,24 @@ import path from 'path';
 import crypto from 'crypto';
 
 const ROOT = process.env.PROSPECTOR_ROOT || process.cwd();
-const CONFIG_PATH = process.env.REGIONAL_PROSPECTING_CONFIG || path.join(ROOT, 'config/regions.json');
-const STORE_PATH = process.env.REGIONAL_PROSPECTING_STORE || path.join(ROOT, 'data/campaigns.json');
+const CONFIG_PATH = process.env.PROSPECTOR_CONFIG || process.env.REGIONAL_PROSPECTING_CONFIG || path.join(ROOT, 'config/regions.json');
+const STORE_PATH = process.env.PROSPECTOR_STORE || process.env.REGIONAL_PROSPECTING_STORE || path.join(ROOT, 'data/campaigns.json');
 const ENV_PATH = process.env.PROSPECTOR_ENV_FILE || path.join(ROOT, '.env');
 
 async function readEnvFile(file) {
   try {
     const raw = await fs.readFile(file, 'utf8');
-    return Object.fromEntries(raw.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith('#') && line.includes('=')).map((line) => {
-      const idx = line.indexOf('=');
-      const key = line.slice(0, idx).trim();
-      const value = line.slice(idx + 1).trim().replace(/^['"]|['"]$/g, '');
-      return [key, value];
-    }));
+    return Object.fromEntries(
+      raw.split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith('#') && line.includes('='))
+        .map((line) => {
+          const idx = line.indexOf('=');
+          const key = line.slice(0, idx).trim();
+          const value = line.slice(idx + 1).trim().replace(/^['"]|['"]$/g, '');
+          return [key, value];
+        }),
+    );
   } catch {
     return {};
   }
@@ -29,15 +34,8 @@ function env(name, fallback = '') {
 
 const EVOLUTION_BASE_URL = env('EVOLUTION_BASE_URL');
 const EVOLUTION_API_KEY = env('EVOLUTION_API_KEY');
-const EVOLUTION_INSTANCE = env('EVOLUTION_INSTANCE', 'Fastfix');
+const EVOLUTION_INSTANCE = env('EVOLUTION_INSTANCE');
 const EVOLUTION_WHATSAPP_NUMBERS_PATH = env('EVOLUTION_WHATSAPP_NUMBERS_PATH', '/chat/whatsappNumbers/{instance}');
-
-const DEFAULT_REGION_DDDS = {
-  'caxias do sul': ['54'],
-  'porto alegre': ['51'],
-  'canoas': ['51'],
-  'novo hamburgo': ['51'],
-};
 
 const BAD_SOURCE_HOSTS = new Set([
   'duckduckgo.com', 'www.duckduckgo.com', 'google.com', 'www.google.com', 'bing.com', 'www.bing.com',
@@ -62,14 +60,14 @@ function normalizePhone(raw) {
 }
 
 function normalizeCityKey(city = '') {
-  return String(city || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  return String(city || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
 }
 
 function allowedDddsForRegion(region = {}) {
   if (Array.isArray(region.allowedDdds) && region.allowedDdds.length) {
     return region.allowedDdds.map((d) => String(d).replace(/\D/g, '')).filter(Boolean);
   }
-  return DEFAULT_REGION_DDDS[normalizeCityKey(region.city)] || [];
+  return [];
 }
 
 function isAllowedDdd(phone, region = {}) {
@@ -80,7 +78,9 @@ function isAllowedDdd(phone, region = {}) {
 }
 
 function extractPhones(text) {
-  return Array.from(new Set((text.match(/(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?(?:9\s*)?\d{4}[-.\s]?\d{4}/g) ?? []).map((m) => m.trim())));
+  return Array.from(new Set(
+    (text.match(/(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?(?:9\s*)?\d{4}[-.\s]?\d{4}/g) ?? []).map((m) => m.trim()),
+  ));
 }
 
 function decodeHtml(value = '') {
@@ -121,9 +121,10 @@ function snippetAroundPhone(text = '', rawPhone = '') {
 function looksLikeBusinessPage(text = '', region = {}) {
   const value = cleanText(text).toLowerCase();
   const city = normalizeCityKey(region.city || '');
-  const hasRepairTerm = /(assist[eê]ncia|t[eé]cnica|celular|smartphone|iphone|samsung|reparo|conserto|manuten[cç][aã]o|telefone|whatsapp|contato)/i.test(value);
+  const keywords = Array.isArray(region.keywords) && region.keywords.length ? region.keywords : [];
+  const hasKeyword = !keywords.length || keywords.some((kw) => normalizeCityKey(value).includes(normalizeCityKey(kw)));
   const hasCity = !city || normalizeCityKey(value).includes(city);
-  return hasRepairTerm && hasCity;
+  return hasKeyword && hasCity;
 }
 
 function decodeDuckDuckGoUrl(rawHref = '') {
@@ -183,7 +184,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
 
 async function fetchSearchHtml(query) {
   const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-  const response = await fetchWithTimeout(url, { headers: { 'User-Agent': 'Mozilla/5.0 FastFix prospecting research' } });
+  const response = await fetchWithTimeout(url, { headers: { 'User-Agent': 'Mozilla/5.0 Prospector research bot' } });
   if (!response.ok) throw new Error(`DuckDuckGo HTTP ${response.status}`);
   return { url: `https://duckduckgo.com/?q=${encodeURIComponent(query)}`, html: await response.text() };
 }
@@ -191,7 +192,7 @@ async function fetchSearchHtml(query) {
 async function fetchPage(url) {
   const response = await fetchWithTimeout(url, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 FastFix prospecting research',
+      'User-Agent': 'Mozilla/5.0 Prospector research bot',
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     },
     redirect: 'follow',
@@ -203,7 +204,7 @@ async function fetchPage(url) {
 }
 
 async function checkWhatsAppNumbers(numbers = []) {
-  if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY) return new Map();
+  if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE) return new Map();
   const uniqueNumbers = Array.from(new Set(numbers.map(normalizePhone).filter(Boolean)));
   if (!uniqueNumbers.length) return new Map();
   const endpoint = `${EVOLUTION_BASE_URL}${EVOLUTION_WHATSAPP_NUMBERS_PATH.replace('{instance}', EVOLUTION_INSTANCE)}`;
@@ -214,19 +215,25 @@ async function checkWhatsAppNumbers(numbers = []) {
   }, 20000);
   const data = await response.json().catch(() => []);
   if (!response.ok || !Array.isArray(data)) return new Map();
-  return new Map(data.map((item) => [normalizePhone(item.number), { exists: item.exists === true, jid: item.jid || null, raw: item }]).filter(([number]) => Boolean(number)));
+  return new Map(
+    data
+      .map((item) => [normalizePhone(item.number), { exists: item.exists === true, jid: item.jid || null, raw: item }])
+      .filter(([number]) => Boolean(number)),
+  );
 }
 
 async function scrapeRegion(region, knownPhones) {
   const city = region.city;
   const uf = region.region || '';
-  const query = region.query || 'assistência técnica celular';
+  const query = region.query || '';
   const limit = Math.max(1, Math.min(100, Number(region.limit) || 30));
+
+  const extraQueries = Array.isArray(region.queries) && region.queries.length ? region.queries : [];
   const searches = [
     `${query} ${city} ${uf} whatsapp telefone site`,
-    `assistência técnica celular ${city} ${uf} contato whatsapp`,
-    `conserto celular ${city} ${uf} telefone assistência`,
-  ];
+    `${query} ${city} ${uf} contato`,
+    ...extraQueries.map((q) => `${q} ${city} ${uf}`),
+  ].filter(Boolean);
 
   const seenUrls = new Set();
   const seenPhones = new Set();
@@ -249,10 +256,17 @@ async function scrapeRegion(region, knownPhones) {
 
         const allowedDdd = normalizedPhone ? isAllowedDdd(normalizedPhone, region) : false;
         const duplicate = normalizedPhone && knownPhones.has(normalizedPhone);
-        const status = !normalizedPhone ? 'invalid_phone' : !allowedDdd ? 'discarded_ddd_mismatch' : duplicate ? 'duplicate' : 'candidate_unverified';
+        const status = !normalizedPhone
+          ? 'invalid_phone'
+          : !allowedDdd
+            ? 'discarded_ddd_mismatch'
+            : duplicate
+              ? 'duplicate'
+              : 'candidate_unverified';
+
         prospects.push({
           id: crypto.randomUUID(),
-          name: page.title || `Assistência técnica ${city}`,
+          name: page.title || `${query} - ${city}`,
           phone: rawPhone,
           normalizedPhone,
           city,
@@ -291,7 +305,6 @@ function summarize(prospects) {
     dddMismatch: prospects.filter((p) => p.status === 'discarded_ddd_mismatch').length,
     notWhatsapp: prospects.filter((p) => p.status === 'discarded_not_whatsapp').length,
     unverified: prospects.filter((p) => p.status === 'candidate_unverified').length,
-    badSource: prospects.filter((p) => p.status === 'discarded_bad_source').length,
   };
 }
 
@@ -308,37 +321,51 @@ const args = new Set(process.argv.slice(2));
 const force = args.has('--force');
 const config = await readJson(CONFIG_PATH, { enabled: false, regions: [] });
 const store = await readJson(STORE_PATH, { campaigns: [], knownPhones: [], lastRunAt: null });
+
 if (!config.enabled && !force) {
   console.log(JSON.stringify({ ok: true, skipped: true, reason: 'config_disabled' }, null, 2));
   process.exit(0);
 }
+
 const knownPhones = new Set(store.knownPhones || []);
 const campaigns = [];
 const now = Date.now();
+
 for (const region of config.regions || []) {
   if (region.enabled === false) continue;
   const last = region.lastRunAt ? Date.parse(region.lastRunAt) : 0;
   const cadenceMs = Math.max(1, Number(region.cadenceHours || config.cadenceHours || 168)) * 60 * 60 * 1000;
   if (!force && last && now - last < cadenceMs) continue;
+
   const prospects = await scrapeRegion(region, knownPhones);
   for (const p of prospects) if (p.normalizedPhone && p.status === 'new') knownPhones.add(p.normalizedPhone);
+
   const campaign = {
     id: crypto.randomUUID(),
-    status: 'draft_pending_paperclip_approval',
+    client: config.client || null,
+    status: 'draft_pending_approval',
     city: region.city,
     region: region.region || null,
-    query: region.query || 'assistência técnica celular',
+    query: region.query || '',
     messageTemplate: config.messageTemplate,
     createdAt: new Date().toISOString(),
     prospects,
     summary: summarize(prospects),
   };
+
   region.lastRunAt = campaign.createdAt;
   campaigns.push(campaign);
 }
+
 store.campaigns = [...campaigns, ...(store.campaigns || [])].slice(0, 100);
 store.knownPhones = Array.from(knownPhones).slice(0, 10000);
 store.lastRunAt = new Date().toISOString();
+
 await writeJson(CONFIG_PATH, config);
 await writeJson(STORE_PATH, store);
-console.log(JSON.stringify({ ok: true, created: campaigns.length, campaigns: campaigns.map((c) => ({ id: c.id, city: c.city, region: c.region, summary: c.summary })) }, null, 2));
+
+console.log(JSON.stringify({
+  ok: true,
+  created: campaigns.length,
+  campaigns: campaigns.map((c) => ({ id: c.id, client: c.client, city: c.city, region: c.region, summary: c.summary })),
+}, null, 2));

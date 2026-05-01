@@ -1,9 +1,9 @@
 {
   "name": "prospector",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Regional WhatsApp prospecting draft generator with DDD and Evolution WhatsApp validation gates.",
+  "description": "Regional WhatsApp lead prospecting with DDD filtering and Evolution API validation. Generic and client-configurable.",
   "scripts": {
     "draft": "node src/regional_prospecting_draft.mjs",
     "draft:force": "node src/regional_prospecting_draft.mjs --force",

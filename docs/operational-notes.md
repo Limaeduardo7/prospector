@@ -1,26 +1,40 @@
-# Operational notes
+# Operational Notes
 
-## Texto de oferta configurado
+Decisions and conventions for running Prospector in production.
 
-```text
-Oi, {nome}! Tudo bem? 👊
+## Prospect name fallback
 
-Vi que vocês trabalham com assistência técnica e reparo de celulares em {cidade}.
+When scraping does not return a reliable business name, use `pessoal` as the generic
+name in the message template. This avoids sending wrong names and keeps the tone neutral.
 
-Como hoje é Dia do Trabalhador, estamos liberando uma condição especial para técnicos que querem subir de nível na bancada.
+## Conversational automation
 
-O CPU PRO é um treinamento avançado para quem quer dominar diagnóstico e reparo de CPU, pegar serviços de maior valor e aumentar o ticket da assistência.
+Do not configure auto-replies to inbound WhatsApp messages. Outbound prospecting drafts
+and inbound conversation handling are separate concerns — keep them decoupled.
 
-Quer que eu te envie o link com as condições especiais de hoje?
+## Instability handling
+
+If the Evolution API or the backend is unstable, do not send fallback or retry messages
+automatically. Prefer silence and log the failure for manual review.
+
+## Cadence
+
+Each region tracks its last run timestamp in `config/regions.json` under `lastRunAt`.
+The global `cadenceHours` (default: 168 = 1 week) prevents re-scraping too frequently.
+Use `npm run draft:force` to bypass cadence during testing or when a fresh batch is needed.
+
+## Known phones store
+
+`data/campaigns.json` keeps a rolling set of up to 10,000 known phone numbers.
+Phones already in this set are marked `duplicate` and excluded from new campaigns.
+The store also keeps the last 100 campaigns for audit purposes.
+
+## Multi-client setup
+
+To run Prospector for multiple clients from the same machine, use separate config and
+store files per client and point to them via environment variables:
+
+```bash
+PROSPECTOR_CONFIG=./config/client-a.json PROSPECTOR_STORE=./data/client-a.json npm run draft
+PROSPECTOR_CONFIG=./config/client-b.json PROSPECTOR_STORE=./data/client-b.json npm run draft
 ```
-
-## Decisões operacionais
-
-- Usar `pessoal` como nome genérico quando o scraping não traz nome confiável.
-- Não mandar mensagens automáticas de resposta a inbound por enquanto.
-- Nunca enviar fallback de instabilidade.
-- Não enviar automaticamente link do FastFix Academy em resposta a palavras como “quero”, “link” etc.
-
-## Resultado de validação da abordagem melhorada
-
-Em produção, a versão melhorada gerou um lote de 41 leads WhatsApp-existentes em quatro cidades, após filtros de DDD e fonte. Os telefones reais não são versionados neste repositório.
