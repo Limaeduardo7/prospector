@@ -24,7 +24,7 @@ Payload:
     {
       "id": "uuid",
       "name": "pessoal",
-      "phone": "5551999999999",
+      "phone": "55DDNUMERO",
       "sourceUrl": "https://exemplo.com",
       "snippet": "trecho de auditoria"
     }
