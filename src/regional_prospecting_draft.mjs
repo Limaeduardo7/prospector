@@ -296,6 +296,78 @@ function renderTemplate(template = '', context = {}) {
   });
 }
 
+function osmTagsForRegion(region = {}) {
+  if (Array.isArray(region.osmTags) && region.osmTags.length) return region.osmTags;
+  const query = normalizeCityKey(region.query || '');
+  if (/odonto|dentista|odontologico|odontologica/.test(query)) {
+    return [{ amenity: 'dentist' }, { healthcare: 'dentist' }];
+  }
+  if (/estetica|beleza|sal[aã]o|clinica/.test(query)) {
+    return [{ shop: 'beauty' }, { healthcare: 'beauty' }];
+  }
+  return [];
+}
+
+function overpassFilterForTag(tag = {}) {
+  return Object.entries(tag)
+    .filter(([key, value]) => key && value)
+    .map(([key, value]) => `["${String(key).replace(/"/g, '\\"')}"="${String(value).replace(/"/g, '\\"')}"]`)
+    .join('');
+}
+
+function osmPhone(tags = {}) {
+  return tags.phone || tags['contact:phone'] || tags.mobile || tags['contact:mobile'] || tags.whatsapp || tags['contact:whatsapp'] || null;
+}
+
+function osmSourceUrl(element = {}) {
+  const type = element.type === 'node' ? 'node' : element.type === 'way' ? 'way' : 'relation';
+  return `https://www.openstreetmap.org/${type}/${element.id}`;
+}
+
+async function fetchOverpassProspects(region = {}, knownPhones, config = {}) {
+  const tags = osmTagsForRegion(region);
+  if (!tags.length) return [];
+  const city = region.city;
+  const uf = region.region || '';
+  const filters = tags.map((tag) => `nwr${overpassFilterForTag(tag)}(area.searchArea);`).join('');
+  const query = `[out:json][timeout:25];area["name"="${String(city).replace(/"/g, '\\"')}"]["boundary"="administrative"]->.searchArea;(${filters});out center tags ${Math.max(1, Math.min(100, Number(region.limit) || 30))};`;
+  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+  const response = await fetchWithTimeout(url, { headers: { 'User-Agent': 'Prospector/1.0 PósVendaIA' } }, 30000).catch(() => null);
+  if (!response?.ok) return [];
+  const data = await response.json().catch(() => ({ elements: [] }));
+  const prospects = [];
+  const seenPhones = new Set();
+  for (const element of data.elements || []) {
+    const tags = element.tags || {};
+    const rawPhone = osmPhone(tags);
+    const normalizedPhone = normalizePhone(rawPhone);
+    if (!rawPhone || !normalizedPhone || seenPhones.has(normalizedPhone)) continue;
+    seenPhones.add(normalizedPhone);
+    const allowedDdd = isAllowedDdd(normalizedPhone, region);
+    const duplicate = knownPhones.has(normalizedPhone);
+    const status = !allowedDdd ? 'discarded_ddd_mismatch' : duplicate ? 'duplicate' : 'candidate_unverified';
+    const prospect = {
+      id: crypto.randomUUID(),
+      name: tags.name || `${region.query || 'Negócio'} - ${city}`,
+      phone: rawPhone,
+      normalizedPhone,
+      city,
+      region: uf || null,
+      sourceUrl: tags.website || tags['contact:website'] || osmSourceUrl(element),
+      sourceType: 'openstreetmap',
+      snippet: Object.entries(tags).map(([key, value]) => `${key}: ${value}`).join(' | ').slice(0, 500),
+      status,
+      product: config.product || config.offer || 'PósVenda IA',
+      audience: region.audience || config.audience || null,
+      pain: region.pain || config.pain || null,
+      createdAt: new Date().toISOString(),
+    };
+    prospect.draftMessage = renderTemplate(config.messageTemplate, templateContext(prospect, region, config));
+    prospects.push(prospect);
+  }
+  return prospects;
+}
+
 async function scrapeRegion(region, knownPhones, config = {}) {
   const city = region.city;
   const uf = region.region || '';
@@ -311,7 +383,11 @@ async function scrapeRegion(region, knownPhones, config = {}) {
 
   const seenUrls = new Set();
   const seenPhones = new Set();
-  const prospects = [];
+  const prospects = await fetchOverpassProspects(region, knownPhones, config);
+  for (const prospect of prospects) {
+    if (prospect.sourceUrl) seenUrls.add(prospect.sourceUrl);
+    if (prospect.normalizedPhone) seenPhones.add(prospect.normalizedPhone);
+  }
 
   for (const search of searches) {
     const urls = await fetchSearchUrls(search);

@@ -4,6 +4,8 @@ Este preset adapta o Prospector para gerar listas de prospecção do produto da 
 
 Objetivo: encontrar negócios com compradores anteriores e potencial de recompra/upsell para oferecer um diagnóstico gratuito de automação e agentes de pós-venda no WhatsApp.
 
+O preset usa busca web + OpenStreetMap/Overpass para categorias locais como clínicas, dentistas e negócios de estética quando `osmTags` estiver presente na configuração da região.
+
 ## Como configurar
 
 ```bash
