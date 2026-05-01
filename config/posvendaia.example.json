@@ -1,0 +1,57 @@
+{
+  "enabled": true,
+  "client": "posvendaia",
+  "product": "PósVenda IA",
+  "offer": "diagnóstico gratuito de pós-venda no WhatsApp",
+  "audience": "negócios digitais com compradores anteriores",
+  "pain": "base compradora parada e dependência de tráfego pago",
+  "landingUrl": "https://posvendaia.netlify.app/",
+  "cadenceHours": 168,
+  "messageTemplate": "Oi, {nome}! Tudo bem?\n\nVi que vocês atuam com {query} e queria te fazer uma pergunta rápida: hoje vocês têm alguma esteira de pós-venda no WhatsApp para vender novamente para quem já comprou?\n\nEstamos implementando a {produto}, uma operação de automação e agentes para gerar recompra, upsell e receita atribuída na base compradora.\n\nSe fizer sentido, posso te mandar um diagnóstico inicial do potencial da sua base?",
+  "regions": [
+    {
+      "city": "São Paulo",
+      "region": "SP",
+      "query": "infoprodutor curso online",
+      "audience": "infoprodutores com cursos, mentorias ou comunidades pagas",
+      "pain": "compradores antigos sem sequência de recompra ou upsell",
+      "keywords": ["curso", "mentoria", "comunidade", "hotmart", "treinamento", "alunos"],
+      "allowedDdds": ["11"],
+      "limit": 25,
+      "enabled": true
+    },
+    {
+      "city": "São Paulo",
+      "region": "SP",
+      "query": "ecommerce loja virtual nicho premium",
+      "audience": "e-commerces com recorrência ou recompra possível",
+      "pain": "dependência de aquisição nova e pouca ativação de clientes existentes",
+      "keywords": ["loja", "comprar", "produto", "ecommerce", "shop", "coleção"],
+      "allowedDdds": ["11"],
+      "limit": 25,
+      "enabled": true
+    },
+    {
+      "city": "Caxias do Sul",
+      "region": "RS",
+      "query": "clínica estética",
+      "audience": "clínicas com recompra, retorno ou planos de continuidade",
+      "pain": "clientes atendidos sem sequência automatizada de retorno e recompra",
+      "keywords": ["estética", "clínica", "procedimento", "tratamento", "agenda"],
+      "allowedDdds": ["54"],
+      "limit": 20,
+      "enabled": true
+    },
+    {
+      "city": "Porto Alegre",
+      "region": "RS",
+      "query": "clínica odontológica",
+      "audience": "clínicas com retorno, manutenção e novos procedimentos",
+      "pain": "pacientes antigos sem esteira de retorno e indicação",
+      "keywords": ["odonto", "dentista", "clínica", "consultório", "implante"],
+      "allowedDdds": ["51"],
+      "limit": 20,
+      "enabled": true
+    }
+  ]
+}

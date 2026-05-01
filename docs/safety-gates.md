@@ -17,7 +17,8 @@ Mandatory rules before any campaign send.
 
 - Use Evolution API `POST /chat/whatsappNumbers/{instance}` with `{ "numbers": [...] }`.
 - Only send to numbers where `exists: true`.
-- If the Evolution API is unavailable, prospects remain as `candidate_unverified` — never assume existence.
+- If the Evolution API is unavailable, prospects remain as `candidate_unverified` with `validationReason` — never assume existence.
+- Only prospects with status `new` should be considered sendable after human review.
 
 ## 4. Clean source policy
 

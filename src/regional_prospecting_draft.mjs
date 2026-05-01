@@ -204,25 +204,68 @@ async function fetchPage(url) {
 }
 
 async function checkWhatsAppNumbers(numbers = []) {
-  if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE) return new Map();
+  if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE) {
+    return { available: false, reason: 'missing_evolution_config', results: new Map() };
+  }
   const uniqueNumbers = Array.from(new Set(numbers.map(normalizePhone).filter(Boolean)));
-  if (!uniqueNumbers.length) return new Map();
+  if (!uniqueNumbers.length) return { available: true, reason: null, results: new Map() };
   const endpoint = `${EVOLUTION_BASE_URL}${EVOLUTION_WHATSAPP_NUMBERS_PATH.replace('{instance}', EVOLUTION_INSTANCE)}`;
-  const response = await fetchWithTimeout(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
-    body: JSON.stringify({ numbers: uniqueNumbers }),
-  }, 20000);
-  const data = await response.json().catch(() => []);
-  if (!response.ok || !Array.isArray(data)) return new Map();
-  return new Map(
-    data
-      .map((item) => [normalizePhone(item.number), { exists: item.exists === true, jid: item.jid || null, raw: item }])
-      .filter(([number]) => Boolean(number)),
-  );
+  try {
+    const response = await fetchWithTimeout(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
+      body: JSON.stringify({ numbers: uniqueNumbers }),
+    }, 20000);
+    const data = await response.json().catch(() => []);
+    if (!response.ok || !Array.isArray(data)) {
+      return { available: false, reason: `evolution_http_${response.status}`, results: new Map() };
+    }
+    return {
+      available: true,
+      reason: null,
+      results: new Map(
+        data
+          .map((item) => [normalizePhone(item.number), { exists: item.exists === true, jid: item.jid || null, raw: item }])
+          .filter(([number]) => Boolean(number)),
+      ),
+    };
+  } catch (error) {
+    return { available: false, reason: error?.name === 'AbortError' ? 'evolution_timeout' : 'evolution_error', results: new Map() };
+  }
 }
 
-async function scrapeRegion(region, knownPhones) {
+function templateContext(prospect = {}, region = {}, config = {}) {
+  return {
+    nome: prospect.name || 'pessoal',
+    name: prospect.name || 'pessoal',
+    cidade: prospect.city || region.city || '',
+    city: prospect.city || region.city || '',
+    regiao: prospect.region || region.region || '',
+    region: prospect.region || region.region || '',
+    query: region.query || '',
+    cliente: config.client || '',
+    client: config.client || '',
+    produto: config.product || config.offer || 'PósVenda IA',
+    product: config.product || config.offer || 'PósVenda IA',
+    oferta: config.offer || config.product || 'PósVenda IA',
+    offer: config.offer || config.product || 'PósVenda IA',
+    publico: region.audience || config.audience || '',
+    audience: region.audience || config.audience || '',
+    dor: region.pain || config.pain || '',
+    pain: region.pain || config.pain || '',
+    landing: config.landingUrl || '',
+    landingUrl: config.landingUrl || '',
+  };
+}
+
+function renderTemplate(template = '', context = {}) {
+  return String(template || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
+    const value = context[key];
+    return value === undefined || value === null || value === '' ? match : String(value);
+  });
+}
+
+async function scrapeRegion(region, knownPhones, config = {}) {
   const city = region.city;
   const uf = region.region || '';
   const query = region.query || '';
@@ -264,7 +307,7 @@ async function scrapeRegion(region, knownPhones) {
               ? 'duplicate'
               : 'candidate_unverified';
 
-        prospects.push({
+        const prospect = {
           id: crypto.randomUUID(),
           name: page.title || `${query} - ${city}`,
           phone: rawPhone,
@@ -274,22 +317,32 @@ async function scrapeRegion(region, knownPhones) {
           sourceUrl: page.url,
           snippet: snippetAroundPhone(page.text, rawPhone),
           status,
+          product: config.product || config.offer || 'PósVenda IA',
+          audience: region.audience || config.audience || null,
+          pain: region.pain || config.pain || null,
           createdAt: new Date().toISOString(),
-        });
+        };
+        prospect.draftMessage = renderTemplate(config.messageTemplate, templateContext(prospect, region, config));
+        prospects.push(prospect);
       }
     }
   }
 
   const candidates = prospects.filter((p) => p.status === 'candidate_unverified');
-  const whatsapp = await checkWhatsAppNumbers(candidates.map((p) => p.normalizedPhone));
+  const validation = await checkWhatsAppNumbers(candidates.map((p) => p.normalizedPhone));
   for (const prospect of candidates) {
-    const wa = whatsapp.get(prospect.normalizedPhone);
-    if (whatsapp.size && !wa?.exists) {
+    if (!validation.available) {
+      prospect.status = 'candidate_unverified';
+      prospect.validationReason = validation.reason;
+      continue;
+    }
+    const wa = validation.results.get(prospect.normalizedPhone);
+    if (!wa?.exists) {
       prospect.status = 'discarded_not_whatsapp';
       prospect.whatsapp = wa?.raw || null;
     } else {
       prospect.status = 'new';
-      prospect.whatsapp = wa?.raw || null;
+      prospect.whatsapp = wa.raw || null;
     }
   }
 
@@ -337,7 +390,7 @@ for (const region of config.regions || []) {
   const cadenceMs = Math.max(1, Number(region.cadenceHours || config.cadenceHours || 168)) * 60 * 60 * 1000;
   if (!force && last && now - last < cadenceMs) continue;
 
-  const prospects = await scrapeRegion(region, knownPhones);
+  const prospects = await scrapeRegion(region, knownPhones, config);
   for (const p of prospects) if (p.normalizedPhone && p.status === 'new') knownPhones.add(p.normalizedPhone);
 
   const campaign = {
@@ -348,6 +401,11 @@ for (const region of config.regions || []) {
     region: region.region || null,
     query: region.query || '',
     messageTemplate: config.messageTemplate,
+    product: config.product || config.offer || 'PósVenda IA',
+    offer: config.offer || config.product || 'PósVenda IA',
+    audience: region.audience || config.audience || null,
+    pain: region.pain || config.pain || null,
+    landingUrl: config.landingUrl || null,
     createdAt: new Date().toISOString(),
     prospects,
     summary: summarize(prospects),

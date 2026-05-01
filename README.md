@@ -15,6 +15,20 @@ Prospector searches for local businesses in configured cities, extracts phone nu
 
 Sending is always a separate, human-approved step via the backend endpoint described in [`docs/send-batch-contract.md`](docs/send-batch-contract.md).
 
+## PósVenda IA preset
+
+This repository can be used to prospect qualified businesses for the **PósVenda IA** offer: WhatsApp automations and agents for post-purchase revenue, reactivation, upsell, and attributed revenue.
+
+Use the ready-made preset:
+
+```bash
+cp config/posvendaia.example.json config/posvendaia.json
+cp data/campaigns.example.json data/posvendaia-campaigns.json
+PROSPECTOR_CONFIG=./config/posvendaia.json PROSPECTOR_STORE=./data/posvendaia-campaigns.json npm run draft
+```
+
+See [`docs/posvendaia-prospecting.md`](docs/posvendaia-prospecting.md) for operating notes.
+
 ## Quickstart
 
 ### 1. Configure environment
@@ -100,6 +114,13 @@ Edit `config/regions.json`:
 | `{cidade}` / `{city}` | City name |
 | `{regiao}` / `{region}` | State/region code |
 | `{query}` | Search query used for this region |
+| `{produto}` / `{product}` | Product name, e.g. `PósVenda IA` |
+| `{oferta}` / `{offer}` | Commercial offer, e.g. diagnostic call |
+| `{publico}` / `{audience}` | Target audience for the region/niche |
+| `{dor}` / `{pain}` | Main pain used for that niche |
+| `{landing}` / `{landingUrl}` | Landing page URL |
+
+Rendered messages are saved per prospect as `draftMessage` for human review.
 
 ## Environment variables
 
