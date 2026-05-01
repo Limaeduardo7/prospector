@@ -185,8 +185,39 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
 async function fetchSearchHtml(query) {
   const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
   const response = await fetchWithTimeout(url, { headers: { 'User-Agent': 'Mozilla/5.0 Prospector research bot' } });
-  if (!response.ok) throw new Error(`DuckDuckGo HTTP ${response.status}`);
+  if (!response.ok && response.status !== 202) throw new Error(`DuckDuckGo HTTP ${response.status}`);
   return { url: `https://duckduckgo.com/?q=${encodeURIComponent(query)}`, html: await response.text() };
+}
+
+function extractBingRssUrls(xml = '') {
+  const urls = [];
+  const seen = new Set();
+  for (const match of String(xml).matchAll(/<item>[\s\S]*?<link>([\s\S]*?)<\/link>[\s\S]*?<\/item>/gi)) {
+    const decoded = decodeHtml(match[1]).trim();
+    if (!decoded || seen.has(decoded) || !isAllowedResultUrl(decoded)) continue;
+    seen.add(decoded);
+    urls.push(decoded);
+  }
+  return urls.slice(0, 12);
+}
+
+async function fetchBingRssUrls(query) {
+  const url = `https://www.bing.com/search?format=rss&q=${encodeURIComponent(query)}`;
+  const response = await fetchWithTimeout(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 Prospector research bot',
+      Accept: 'application/rss+xml,application/xml,text/xml;q=0.9,*/*;q=0.8',
+    },
+  });
+  if (!response.ok) return [];
+  return extractBingRssUrls(await response.text());
+}
+
+async function fetchSearchUrls(query) {
+  const { html } = await fetchSearchHtml(query).catch(() => ({ html: '' }));
+  const duckDuckGoUrls = extractResultUrls(html);
+  if (duckDuckGoUrls.length) return duckDuckGoUrls;
+  return fetchBingRssUrls(query);
 }
 
 async function fetchPage(url) {
@@ -283,8 +314,7 @@ async function scrapeRegion(region, knownPhones, config = {}) {
   const prospects = [];
 
   for (const search of searches) {
-    const { html } = await fetchSearchHtml(search);
-    const urls = extractResultUrls(html);
+    const urls = await fetchSearchUrls(search);
     for (const resultUrl of urls) {
       if (seenUrls.has(resultUrl)) continue;
       seenUrls.add(resultUrl);
