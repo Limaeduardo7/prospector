@@ -220,14 +220,14 @@ async function fetchSearchUrls(query) {
   return fetchBingRssUrls(query);
 }
 
-async function fetchPage(url) {
+async function fetchPage(url, timeoutMs = 12000) {
   const response = await fetchWithTimeout(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 Prospector research bot',
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     },
     redirect: 'follow',
-  });
+  }, timeoutMs);
   const contentType = response.headers.get('content-type') || '';
   if (!response.ok || !/text\/html|application\/xhtml|text\/plain/i.test(contentType)) return null;
   const html = await response.text();
@@ -373,6 +373,8 @@ async function scrapeRegion(region, knownPhones, config = {}) {
   const uf = region.region || '';
   const query = region.query || '';
   const limit = Math.max(1, Math.min(100, Number(region.limit) || 30));
+  const maxSearchUrlsPerQuery = Math.max(1, Math.min(12, Number(region.maxSearchUrlsPerQuery || config.maxSearchUrlsPerQuery || 6)));
+  const pageFetchTimeoutMs = Math.max(3000, Math.min(20000, Number(region.pageFetchTimeoutMs || config.pageFetchTimeoutMs || 12000)));
 
   const extraQueries = Array.isArray(region.queries) && region.queries.length ? region.queries : [];
   const searches = [
@@ -390,11 +392,11 @@ async function scrapeRegion(region, knownPhones, config = {}) {
   }
 
   for (const search of searches) {
-    const urls = await fetchSearchUrls(search);
+    const urls = (await fetchSearchUrls(search)).slice(0, maxSearchUrlsPerQuery);
     for (const resultUrl of urls) {
       if (seenUrls.has(resultUrl)) continue;
       seenUrls.add(resultUrl);
-      const page = await fetchPage(resultUrl).catch(() => null);
+      const page = await fetchPage(resultUrl, pageFetchTimeoutMs).catch(() => null);
       if (!page || !looksLikeBusinessPage(page.text, region)) continue;
 
       for (const rawPhone of extractPhones(page.text)) {
@@ -489,13 +491,22 @@ if (!config.enabled && !force) {
 const knownPhones = new Set(store.knownPhones || []);
 const campaigns = [];
 const now = Date.now();
+const maxRegionsPerRun = Math.max(1, Number(config.maxRegionsPerRun || process.env.PROSPECTOR_MAX_REGIONS || (config.regions || []).length));
+let processedRegions = 0;
 
-for (const region of config.regions || []) {
-  if (region.enabled === false) continue;
+const enabledRegions = (config.regions || []).filter((region) => region.enabled !== false);
+const startIndex = Math.max(0, Number(process.env.PROSPECTOR_REGION_OFFSET ?? store.nextRegionIndex ?? 0)) % Math.max(1, enabledRegions.length || 1);
+let consideredRegions = 0;
+
+for (let i = 0; i < enabledRegions.length && processedRegions < maxRegionsPerRun; i++) {
+  const regionIndex = (startIndex + i) % enabledRegions.length;
+  const region = enabledRegions[regionIndex];
+  consideredRegions++;
   const last = region.lastRunAt ? Date.parse(region.lastRunAt) : 0;
   const cadenceMs = Math.max(1, Number(region.cadenceHours || config.cadenceHours || 168)) * 60 * 60 * 1000;
   if (!force && last && now - last < cadenceMs) continue;
 
+  processedRegions++;
   const prospects = await scrapeRegion(region, knownPhones, config);
   for (const p of prospects) if (p.normalizedPhone && p.status === 'new') knownPhones.add(p.normalizedPhone);
 
@@ -520,6 +531,7 @@ for (const region of config.regions || []) {
   region.lastRunAt = campaign.createdAt;
   campaigns.push(campaign);
 }
+store.nextRegionIndex = enabledRegions.length ? (startIndex + Math.max(consideredRegions, processedRegions)) % enabledRegions.length : 0;
 
 store.campaigns = [...campaigns, ...(store.campaigns || [])].slice(0, 100);
 store.knownPhones = Array.from(knownPhones).slice(0, 10000);
@@ -531,5 +543,8 @@ await writeJson(STORE_PATH, store);
 console.log(JSON.stringify({
   ok: true,
   created: campaigns.length,
+  processedRegions,
+  maxRegionsPerRun,
+  nextRegionIndex: store.nextRegionIndex,
   campaigns: campaigns.map((c) => ({ id: c.id, client: c.client, city: c.city, region: c.region, summary: c.summary })),
 }, null, 2));

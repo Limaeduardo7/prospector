@@ -7,7 +7,11 @@
   "scripts": {
     "draft": "node src/regional_prospecting_draft.mjs",
     "draft:force": "node src/regional_prospecting_draft.mjs --force",
-    "check": "node --check src/regional_prospecting_draft.mjs"
+    "send": "node src/send_batch.mjs",
+    "auto": "node src/regional_prospecting_draft.mjs && node src/send_batch.mjs",
+    "auto:force": "node src/regional_prospecting_draft.mjs --force && node src/send_batch.mjs",
+    "check": "node --check src/regional_prospecting_draft.mjs && node --check src/send_batch.mjs && node --check src/prospecting_report.mjs",
+    "report": "node src/prospecting_report.mjs"
   },
   "engines": {
     "node": ">=20"

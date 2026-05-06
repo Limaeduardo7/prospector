@@ -2,6 +2,8 @@
 config/*.local.json
 data/campaigns.json
 data/*.local.json
+data/*.paperclip.json
+data/last-prospecting-report.*
 logs/
 node_modules/
 *.log
